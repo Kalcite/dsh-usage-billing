@@ -1,0 +1,12 @@
+# 发布产物由根 package.json 的 "files" 白名单决定（lib/、src/、patch、
+# README、LICENSE、icon、构建脚本），因此这里只需排除开发期文件。
+#
+# 注意：lib/ 必须随包发布——DSH 不会替第三方插件构建任何代码，
+# 客户端模块系统只读取 exports["./client"] 指到的现成文件。
+
+tests/
+tsconfig.json
+pnpm-workspace.yaml
+pnpm-lock.yaml
+.gitignore
+.npmignore

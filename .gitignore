@@ -1,0 +1,5 @@
+node_modules/
+*.tsbuildinfo
+
+# 构建产物按需生成（发布前跑 pnpm run build）
+# lib/ 不忽略：包要带预构建产物发布，DSH 不会替第三方构建。

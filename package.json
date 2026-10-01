@@ -1,0 +1,102 @@
+{
+  "name": "dsh-usage-billing",
+  "version": "1.0.0",
+  "description": "DeepSeek Harness 用量与计费插件 — 扫描会话日志统计 Token 消耗，按多模型单价与峰谷时段（北京时间）实时计费，提供费用总览、Token 构成、日历热力图、会话钻取等看板，单价与峰谷规则可在设置中实时调整。",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "usage",
+    "billing",
+    "tokens",
+    "cost"
+  ],
+  "type": "module",
+  "license": "MIT",
+  "author": "Kalcite",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kalcite/dsh-usage-billing.git"
+  },
+  "homepage": "https://github.com/Kalcite/dsh-usage-billing#readme",
+  "bugs": {
+    "url": "https://github.com/Kalcite/dsh-usage-billing/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "main": "lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./pricing": {
+      "types": "./lib/pricing.d.ts",
+      "default": "./lib/pricing.js"
+    },
+    "./ledger": {
+      "types": "./lib/ledger.d.ts",
+      "default": "./lib/ledger.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
+    }
+  },
+  "files": [
+    "lib/",
+    "src/",
+    "scripts/build-client.mjs",
+    "cordis.patch.yml",
+    "README.md",
+    "README.en.md",
+    "LICENSE",
+    "icon.svg"
+  ],
+  "scripts": {
+    "build": "node scripts/build-client.mjs && tsc -p tsconfig.json",
+    "build:client": "node scripts/build-client.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node scripts/run-tests.mjs",
+    "verify": "node scripts/run-tests.mjs && node scripts/check-client-bundle.mjs && node scripts/check-ledger.mjs"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-host-webserver": "^0.2.0-rc.1",
+    "@deepseek-ai/schemastery": "^3.18.4"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-host-webserver": {
+      "optional": true
+    },
+    "@deepseek-ai/schemastery": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/cosmokit": "^1.8.5",
+    "@deepseek-ai/dsh-host-webserver": "0.2.0-rc.2",
+    "@deepseek-ai/schemastery": "3.18.4",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.2"
+  }
+}

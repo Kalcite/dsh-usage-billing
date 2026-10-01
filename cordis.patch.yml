@@ -1,0 +1,41 @@
+# dsh-usage-billing 的 bundle patch
+#
+# 这是包的 `dsh.bundle.patch` 层。通过官方 CLI 安装时：
+#
+#   dsh plugin --profile web add dsh-usage-billing
+#
+# 该命令会把包加进 profile 的 `dependencies` 与 `dsh.profile.bundles`，然后
+# profile 启动时合并本文件——也就是下面这一条 `insert`。用户不需要手改任何
+# profile 文件。
+#
+# 行的 id 固定为 `usage-billing`：插件把计费配置挂在 Loader 行上，`ctx.settings`
+# 的命名空间就是**行 id**（不是包名），因此这个 id 一旦发布就不应改动，
+# 否则用户已保存的单价会失配。
+#
+# Web 半边（设置 → 用量计费）由客户端模块系统按规则自动挂载：它扫描
+# `dsh.client` 声明，并把 `exports["./client"]` 指到的预构建产物挂到
+# `/plugins/dsh-usage-billing/client.js`。这里不需要（也不能）为它单开一行。
+#
+# 可选配置示例（把单价与峰谷规则写进 profile patch）：
+#
+#   - id: usage-billing
+#     name: 'dsh-usage-billing'
+#     config:
+#       offPeakMultiplier: 0.5
+#       peakSlots:
+#         - { start: 9, end: 12 }
+#         - { start: 14, end: 18 }
+#       weekendRelax: true
+#       weekendRelaxFrom: '2026-08-23'
+#       # timezone: Asia/Shanghai
+#       # home: 'C:\Users\you\.dsh'
+#       models:
+#         deepseek-flash: { inputPerM: 3, outputPerM: 9, cacheReadPerM: 0.1, cacheWritePerM: 3 }
+#         deepseek-v4-pro: { inputPerM: 9, outputPerM: 27, cacheReadPerM: 0.3, cacheWritePerM: 9 }
+#         _default: { inputPerM: 3, outputPerM: 9, cacheReadPerM: 0.1, cacheWritePerM: 3 }
+#
+# 更省事的做法：留空即可用官方默认值，之后在「设置 → 插件 → dsh-usage-billing」
+# 里实时改——那些字段都是 volatile，由 Loader 写回 profile patch。
+- insert:
+    - id: usage-billing
+      name: 'dsh-usage-billing'

@@ -1,0 +1,12 @@
+# 本地开发 / 测试用的安装模式。
+#
+# 默认（isolated）只把**直接**依赖链接进 node_modules，因此集成测试里引入
+# `@deepseek-ai/dsh-host-webserver` 时，它自己的依赖（如 `compression`）解析不到。
+# hoisted 让整棵依赖闭包都落在 node_modules 顶层，集成测试才能直接跑真实包。
+#
+# 这不影响发布：发布的包不带 node_modules，`peerDependencies` 由 DSH profile 满足。
+packages:
+  - .
+
+nodeLinker: hoisted
+autoInstallPeers: false
