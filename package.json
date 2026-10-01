@@ -30,6 +30,9 @@
   },
   "main": "lib/index.js",
   "types": "./lib/index.d.ts",
+  "bin": {
+    "dsh-usage-report": "./bin/usage-report.mjs"
+  },
   "exports": {
     ".": {
       "types": "./lib/index.d.ts",
@@ -64,6 +67,7 @@
   "files": [
     "lib/",
     "src/",
+    "bin/",
     "scripts/build-client.mjs",
     "cordis.patch.yml",
     "README.md",
