@@ -46,6 +46,14 @@
       "types": "./lib/ledger.d.ts",
       "default": "./lib/ledger.js"
     },
+    "./holidays": {
+      "types": "./lib/holidays.d.ts",
+      "default": "./lib/holidays.js"
+    },
+    "./cache": {
+      "types": "./lib/cache.d.ts",
+      "default": "./lib/cache.js"
+    },
     "./client": {
       "default": "./lib/client.js"
     },

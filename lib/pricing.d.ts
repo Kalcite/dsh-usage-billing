@@ -15,6 +15,9 @@
  *
  * @module dsh-usage-billing/pricing
  */
+import { type HolidayCalendar, type HolidayCoverage } from './holidays.js';
+export { BUILTIN_HOLIDAY_CALENDAR, dayKind, holidayCalendarCoverage, isHoliday, isMakeupWorkday, mergeHolidayCalendar, } from './holidays.js';
+export type { HolidayCalendar, HolidayCoverage, HolidayRange } from './holidays.js';
 /** 单个模型的单价，单位「元 / 百万 token」，均为高峰价。 */
 export interface ModelPrice {
     /** 高峰：输入（缓存未命中） */
@@ -49,6 +52,14 @@ export interface PricingRule {
      * 缺省用运行环境的本地时区；峰谷时段本身始终按北京时间定义。
      */
     timezone?: string;
+    /**
+     * 节假日 / 调休日历（已与内置数据合并）。
+     *
+     * 判定优先级：**法定节假日 > 调休上班日 > 周末 > 工作日**。
+     * 节假日与调休上班日**不受 `weekendRelax` 开关影响**——春节、国庆的折扣语义
+     * 与「周末打折」无关，关掉周末规则不应让假期涨价。
+     */
+    calendar: HolidayCalendar;
     /** 模型单价表；`_default` 是未列出模型的兜底 */
     models: Readonly<Record<string, ModelPrice>>;
 }
@@ -129,6 +140,14 @@ export declare function weekendRelaxActive(date: string, pricing: PricingRule): 
 export declare function inPeakSlot(hour: number, pricing: PricingRule): boolean;
 /**
  * 某个「日期 / 星期 / 小时」是否按高峰价计费。
+ *
+ * 判定顺序（这一条就是计费口径的唯一出处）：
+ *
+ *   1. **法定节假日** → 全天空闲。与 `weekendRelax` 开关无关。
+ *   2. **调休上班日** → 按工作日走峰谷（不再因为是周末而全天空闲）。
+ *   3. **周六 / 周日** → 若 `weekendRelax` 生效则全天空闲。
+ *   4. 其余 → 按高峰时段。
+ *
  * @param date - `YYYY-MM-DD`。
  * @param weekday - 0 = 周日。
  * @param hour - 0-23。
@@ -136,6 +155,23 @@ export declare function inPeakSlot(hour: number, pricing: PricingRule): boolean;
  * @returns 高峰价为 true，空闲价为 false。
  */
 export declare function isPeakAt(date: string, weekday: number, hour: number, pricing: PricingRule): boolean;
+/**
+ * 某一天为什么按高峰或空闲计费（用于界面标注与排障）。
+ * @param date - `YYYY-MM-DD`。
+ * @param weekday - 0 = 周日。
+ * @param pricing - 归一化后的规则。
+ * @returns 当天的性质，以及是否全天空闲。
+ */
+export declare function dayRelaxReason(date: string, weekday: number, pricing: PricingRule): {
+    kind: 'holiday' | 'makeup' | 'weekend' | 'weekday';
+    allDayOffPeak: boolean;
+};
+/**
+ * 日历覆盖情况（暴露给界面，提醒用户补充后续年份）。
+ * @param pricing - 归一化后的规则。
+ * @returns 覆盖到的年份、最后一个假期日期、以及冲突项。
+ */
+export declare function pricingCalendarCoverage(pricing: PricingRule): HolidayCoverage;
 /**
  * 一组 token 在不含峰谷系数时的「全高峰」费用。
  * @param tokens - token 四元组。

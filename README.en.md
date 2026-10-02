@@ -128,15 +128,75 @@ CNY per million tokens, peak price:
 
 ### Peak / off-peak
 
+Precedence, highest first: **statutory holiday → makeup workday → weekend → weekday**.
+
 - Peak windows default to **09:00–12:00 and 14:00–18:00 Beijing time**, start inclusive, end exclusive.
 - Off-peak = peak × `offPeakMultiplier` (default 0.5).
-- **Weekends (Sat/Sun) are all-day off-peak** from `weekendRelaxFrom` (default `2026-08-23`) at 00:00; weekends *before* that date still split by window.
-- Each **date × hour × model** bucket decides peak/off-peak independently, so usage crossing a window boundary is billed correctly.
+- **Statutory holidays are all-day off-peak**, including holidays that land on weekdays (e.g. 2026-10-01 Thu, 10-02 Fri) and every day of a bridging holiday. This is **independent of the `weekendRelax` switch** — Spring Festival / National Day discounts have nothing to do with "weekend discounts".
+- **Makeup workdays bill as weekdays** (peak/off-peak by window). These are Saturdays/Sundays people actually work (e.g. 2026-09-20 Sun, 2026-10-10 Sat), so they must not take the all-day weekend discount.
+- **Ordinary weekends (Sat/Sun) are all-day off-peak** from `weekendRelaxFrom` (default `2026-08-23`) at 00:00; earlier weekends still split by window.
+- Each **date × hour × model** bucket decides independently, so usage crossing a window boundary is billed correctly.
+
+### Holiday calendar
+
+**2026** is built in, transcribed from the official notice:
+[Notice of the General Office of the State Council on 2026 public holiday arrangements](https://www.gov.cn/zhengce/zhengceku/202511/content_7047091.htm).
+
+| Holiday | Days off | Makeup workdays |
+| --- | --- | --- |
+| New Year | 01-01 → 01-03 | 01-04 |
+| Spring Festival | 02-15 → 02-23 | 02-14, 02-28 |
+| Qingming | 04-04 → 04-06 | — |
+| Labour Day | 05-01 → 05-05 | 05-09 |
+| Dragon Boat | 06-19 → 06-21 | — |
+| Mid-Autumn | 09-25 → 09-27 | — |
+| National Day | 10-01 → 10-07 | 09-20, 10-10 |
+
+> ⚠️ **Later years are yours to maintain.** The State Council publishes the next year's
+> schedule around November, so the built-in data has a definite cut-off (the panel shows it
+> under *Scan info → holiday calendar coverage*). Uncovered years **silently fall back to
+> weekend-only logic**, so top it up when it expires:
+
+```yaml
+- id: usage-billing
+  name: 'dsh-usage-billing'
+  config:
+    extraHolidays:                       # appended on top of the built-in data
+      - { name: 'New Year', from: '2027-01-01', to: '2027-01-03' }
+    extraMakeupWorkdays:
+      - '2027-01-04'
+```
 
 ```
 bucket cost = Σ_models (in×inPerM + out×outPerM + cacheRead×cacheReadPerM + cacheWrite×cacheWritePerM) / 1e6 × multiplier
 multiplier  = peak ? 1 : offPeakMultiplier
 ```
+
+---
+
+## Caching
+
+Scanning every session log means decompressing tens of MB — measured at about **5 s** on the
+original machine. The aggregate is therefore cached on disk:
+
+| | Time |
+| --- | --- |
+| First open (full scan + write cache) | ~5000 ms |
+| Later opens (verify fingerprint + read cache) | **~5 ms** (~1000×) |
+
+A hit requires both the log *fingerprint* (count + total bytes + newest mtime) and the
+*pricing rule* to be unchanged. The fingerprint only walks the directory and `stat`s
+(measured 4 ms) — it never reads or decompresses file contents.
+
+- The **"再次扫描" (rescan) button** in the panel header skips the cache, re-reads every log,
+  and refreshes the cache — that is the "update" entry point.
+- The panel header states whether this load came from **cache** or a **full scan**, with its timestamp.
+- The cache lives in the system temp directory
+  (`%TEMP%/dsh-usage-billing/overview-<hash-of-data-dir>.json`), keyed by data directory. It is
+  pure derived data: **deleting it just costs one rescan**, and any corruption or permission
+  problem falls back to scanning.
+- Changing rates or peak windows invalidates it naturally (the pricing rule is part of the
+  cache key) — no manual clearing needed.
 
 ---
 

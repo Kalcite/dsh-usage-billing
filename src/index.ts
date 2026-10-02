@@ -24,8 +24,9 @@ import z from '@deepseek-ai/schemastery'
 // 并声明 `webserver/index-inject` 事件。没有值的引入。
 import type {} from '@deepseek-ai/dsh-host-webserver'
 
-import { DEFAULT_PRICING, resolvePricing, type ModelPrice, type PricingRule } from './pricing.js'
+import { DEFAULT_PRICING, pricingCalendarCoverage, resolvePricing, type ModelPrice, type PricingRule } from './pricing.js'
 import { defaultHome, usageOverview, type UsageOverview } from './ledger.js'
+import { cachePathFor, fingerprintOf, pricingKeyOf, readCache, sameFingerprint, writeCache } from './cache.js'
 
 export { DEFAULT_PRICING, MODEL_LABELS, modelLabel, resolvePricing } from './pricing.js'
 export type { ModelPrice, PeakSlot, PricingRule, TokenBuckets } from './pricing.js'
@@ -99,6 +100,17 @@ export interface Config {
   home: Volatile<string>
   /** 模型单价表；键是模型 id，`_default` 是兜底。留空则用官方默认表 */
   models: Volatile<Record<string, ModelPrice>>
+  /**
+   * 补充的法定节假日区间（在**内置 2026 年数据之上追加**）。
+   *
+   * 国务院每年 11 月左右公布次年安排，内置数据有明确截止点；之后的年份在这里补。
+   */
+  extraHolidays: Volatile<{ name?: string; from: string; to: string }[]>
+  /**
+   * 补充的调休上班日（`YYYY-MM-DD`，叠加在内置数据之上）。
+   * 这些日期按工作日区分峰谷，不再享受「周末全天空闲」。
+   */
+  extraMakeupWorkdays: Volatile<string[]>
 }
 
 /**
@@ -127,6 +139,12 @@ export const Config = z.object({
     cacheReadPerM: z.number().min(0).default(0.1),
     cacheWritePerM: z.number().min(0).default(3),
   })).default({}).volatile(),
+  extraHolidays: z.array(z.object({
+    name: z.string().default(''),
+    from: z.string(),
+    to: z.string(),
+  })).default([]).volatile(),
+  extraMakeupWorkdays: z.array(z.string()).default([]).volatile(),
 }) as unknown as z<Config>
 
 /**
@@ -164,8 +182,20 @@ export function pricingFromConfig(config: Config): Partial<PricingRule> {
   if (models !== null && typeof models === 'object' && Object.keys(models).length > 0) {
     rule.models = models
   }
+
+  // 节假日 / 调休：只传「用户补充」，`resolvePricing` 会叠加到内置 2026 年数据之上。
+  const extraHolidays = current(config.extraHolidays)
+    .filter((r) => DATE_RE.test(r.from) && DATE_RE.test(r.to) && r.to >= r.from)
+    .map((r) => ({ name: r.name === undefined || r.name === '' ? '自定义假期' : r.name, from: r.from, to: r.to }))
+  const extraMakeup = current(config.extraMakeupWorkdays).filter((d) => DATE_RE.test(d))
+  if (extraHolidays.length > 0 || extraMakeup.length > 0) {
+    rule.calendar = { holidays: extraHolidays, makeupWorkdays: extraMakeup }
+  }
   return rule
 }
+
+/** `YYYY-MM-DD` 形态校验（配置里的日期字段）。 */
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 /** 请求头的最小结构。 */
 interface HeadersLike {
@@ -203,8 +233,8 @@ function writeJson(
   res.end(JSON.stringify(body))
 }
 
-/** 命中缓存的最大年龄；扫描全部会话不便宜，短窗口合并并发请求。 */
-const CACHE_MS = 5_000
+/** 进程内 memo 的最大年龄；只用于合并并发请求，不是主要缓存手段。 */
+const MEMO_MS = 5_000
 
 /**
  * 插件主体。
@@ -223,24 +253,60 @@ export function apply(ctx: Context, config: Config): void {
     return configured !== '' ? configured : defaultHome()
   }
 
-  let cache: { at: number; home: string; pricingKey: string; value: UsageOverview } | null = null
+  /** 进程内短缓存：合并同一时刻的并发请求（避免多个标签页各扫一遍）。 */
+  let memo: { at: number; home: string; pricingKey: string; value: UsageOverview } | null = null
 
-  const buildOverview = async (force: boolean): Promise<UsageOverview> => {
+  /** 上一次返回是否来自磁盘缓存（供 /health 与界面显示）。 */
+  let lastSource: 'cache' | 'scan' = 'scan'
+
+  /**
+   * 取用量总览。
+   *
+   * 层次：
+   *   1. 进程内 memo（5 秒）——合并并发请求；
+   *   2. 磁盘缓存——指纹（日志数量/字节/最新 mtime）+ 计费规则都未变则命中，
+   *      这是「首次慢一次、之后秒开」的关键；
+   *   3. 真正扫描，并写回磁盘缓存。
+   *
+   * @param force - 用户点「重新扫描」时为 true：跳过前两层并重写缓存。
+   * @returns 总览与来源。
+   */
+  const buildOverview = async (force: boolean): Promise<{ value: UsageOverview; source: 'cache' | 'scan' }> => {
     const home = activeHome()
     const pricing = activePricing()
-    const pricingKey = JSON.stringify(pricing)
+    const pricingKey = pricingKeyOf(pricing)
     const now = Date.now()
-    if (!force && cache !== null && cache.home === home && cache.pricingKey === pricingKey && now - cache.at < CACHE_MS) {
-      return cache.value
+
+    if (!force && memo !== null && memo.home === home && memo.pricingKey === pricingKey && now - memo.at < MEMO_MS) {
+      lastSource = 'cache'
+      return { value: memo.value, source: 'cache' }
     }
+
+    if (!force) {
+      const cached = readCache(home)
+      if (
+        cached !== null
+        && cached.pricingKey === pricingKey
+        && sameFingerprint(cached.fingerprint, fingerprintOf(home))
+      ) {
+        memo = { at: now, home, pricingKey, value: cached.overview }
+        lastSource = 'cache'
+        logger?.info?.('dsh-usage-billing: 命中磁盘缓存（扫描于 %s）', new Date(cached.writtenAt).toLocaleString())
+        return { value: cached.overview, source: 'cache' }
+      }
+    }
+
     const value = await usageOverview({ home, pricing })
-    cache = { at: now, home, pricingKey, value }
-    return value
+    memo = { at: now, home, pricingKey, value }
+    lastSource = 'scan'
+    writeCache(home, { pricingKey, fingerprint: fingerprintOf(home), overview: value })
+    return { value, source: 'scan' }
   }
 
-  // 配置变更后立刻作废缓存，否则界面要等一个缓存周期才看到新单价。
+  // 配置变更后立刻作废进程内缓存，否则界面要等一个缓存周期才看到新单价。
+  // 磁盘缓存不用清：它的键含计费规则指纹，规则一变自然不命中。
   ctx.on('loader/volatile-update', () => {
-    cache = null
+    memo = null
   })
 
   ctx.effect(() => ctx.webServer.register({
@@ -257,19 +323,33 @@ export function apply(ctx: Context, config: Config): void {
 
       try {
         if (route === '/' || route === '/summary') {
-          const overview = await buildOverview(url.searchParams.get('refresh') === '1')
-          writeJson(res, 200, { ok: true, overview })
+          const { value, source } = await buildOverview(url.searchParams.get('refresh') === '1')
+          writeJson(res, 200, {
+            ok: true,
+            overview: value,
+            source,
+            calendar: pricingCalendarCoverage(activePricing()),
+          })
           return
         }
         if (route === '/pricing') {
-          writeJson(res, 200, { ok: true, pricing: activePricing() })
+          writeJson(res, 200, {
+            ok: true,
+            pricing: activePricing(),
+            calendar: pricingCalendarCoverage(activePricing()),
+          })
           return
         }
         if (route === '/health') {
+          const pricing = activePricing()
           writeJson(res, 200, {
             ok: true,
             route: ROUTE_PREFIX,
             home: activeHome(),
+            lastSource,
+            cacheFile: cachePathFor(activeHome()),
+            fingerprint: fingerprintOf(activeHome()),
+            calendar: pricingCalendarCoverage(pricing),
             config: pricingFromConfig(config),
           })
           return

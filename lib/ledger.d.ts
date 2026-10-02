@@ -144,13 +144,15 @@ export interface UsageOverview {
     };
 }
 /** 一个会话目录的定位结果。 */
-interface SessionLocation {
+export interface SessionLocation {
     projectKey: string;
     sessionId: string;
     dir: string;
     logPath: string;
     generation: number;
     bytes: number;
+    /** 日志的最后修改时间（epoch 毫秒）；用于磁盘缓存的指纹 */
+    mtimeMs: number;
 }
 /**
  * 默认的 DSH 数据目录。
@@ -177,4 +179,3 @@ export declare function usageOverview(options?: {
     home?: string;
     pricing?: Partial<PricingRule> | null;
 }): Promise<UsageOverview>;
-export {};

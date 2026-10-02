@@ -83,6 +83,21 @@ export interface Config {
     home: Volatile<string>;
     /** 模型单价表；键是模型 id，`_default` 是兜底。留空则用官方默认表 */
     models: Volatile<Record<string, ModelPrice>>;
+    /**
+     * 补充的法定节假日区间（在**内置 2026 年数据之上追加**）。
+     *
+     * 国务院每年 11 月左右公布次年安排，内置数据有明确截止点；之后的年份在这里补。
+     */
+    extraHolidays: Volatile<{
+        name?: string;
+        from: string;
+        to: string;
+    }[]>;
+    /**
+     * 补充的调休上班日（`YYYY-MM-DD`，叠加在内置数据之上）。
+     * 这些日期按工作日区分峰谷，不再享受「周末全天空闲」。
+     */
+    extraMakeupWorkdays: Volatile<string[]>;
 }
 /**
  * 计费规则的 schema。

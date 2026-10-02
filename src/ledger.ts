@@ -187,13 +187,15 @@ function addTokens(target: Accumulator, tokens: TokenBuckets): void {
 }
 
 /** 一个会话目录的定位结果。 */
-interface SessionLocation {
+export interface SessionLocation {
   projectKey: string
   sessionId: string
   dir: string
   logPath: string
   generation: number
   bytes: number
+  /** 日志的最后修改时间（epoch 毫秒）；用于磁盘缓存的指纹 */
+  mtimeMs: number
 }
 
 /**
@@ -253,8 +255,11 @@ export function listSessionLogs(home: string): { locations: SessionLocation[]; m
       }
       const logPath = path.join(sessionDir, picked.name)
       let bytes = 0
+      let mtimeMs = 0
       try {
-        bytes = statSync(logPath).size
+        const info = statSync(logPath)
+        bytes = info.size
+        mtimeMs = info.mtimeMs
       } catch {
         continue
       }
@@ -265,6 +270,7 @@ export function listSessionLogs(home: string): { locations: SessionLocation[]; m
         logPath,
         generation: picked.generation,
         bytes,
+        mtimeMs,
       })
     }
   }
