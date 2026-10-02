@@ -63,6 +63,34 @@ dsh plugin --profile web add "file:$PWD"
 dsh plugin --profile web remove dsh-usage-billing
 ```
 
+### 验证装好了
+
+```bash
+# 主机半边：应返回 {"ok":true,...}
+curl http://127.0.0.1:3080/usage-billing/health
+
+# 客户端产物：应返回 200 与一段 JS
+curl -I 'http://127.0.0.1:3080/plugins/??dsh-usage-billing/client.js&rev=0'
+```
+
+第二条的**地址形状很关键**：DSH 的客户端模块系统用**组合查询**寻址插件资源
+（`/plugins/??<id>/client.js&rev=<hash>`），**不是** `/plugins/<id>/client.js`。
+后者必然 404——那只是路径形状不对，不代表插件有问题。真实地址可以在页面控制台里读：
+
+```js
+window.__DSH_BOOT__.entries.find(e => e.id === 'dsh-usage-billing')
+```
+
+主机半边的自检也可用仓库自带的命令行报告（不依赖客户端插件系统）：
+
+```bash
+node bin/usage-report.mjs --port 3080
+```
+
+> 客户端插件路由由 `@deepseek-ai/dsh-client-modules` 注册，Web profile 会挂载它。
+> 若某个精简装配缺了这一行，则**所有**客户端插件（含 DSH 自带）的 bundle 都会
+> 404，本插件界面不会出现；此时主机半边与上面的命令行报告仍然可用。
+
 ---
 
 ## 配置

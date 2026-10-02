@@ -51,6 +51,36 @@ dsh plugin --profile web add "file:$PWD"
 
 `lib/` **must be prebuilt and published**: DSH never builds third-party plugin code, and the client module system only serves the existing file named by `exports["./client"]`.
 
+### Verifying the install
+
+```bash
+# Host half: should return {"ok":true,...}
+curl http://127.0.0.1:3080/usage-billing/health
+
+# Client artifact: should return 200 and a JS body
+curl -I 'http://127.0.0.1:3080/plugins/??dsh-usage-billing/client.js&rev=0'
+```
+
+The **URL shape matters**: the client module system addresses plugin resources with a
+**combo query** (`/plugins/??<id>/client.js&rev=<hash>`), **not** `/plugins/<id>/client.js`.
+The latter always 404s — that is a wrong path shape, not a broken plugin. Read the real
+URL from the page console:
+
+```js
+window.__DSH_BOOT__.entries.find(e => e.id === 'dsh-usage-billing')
+```
+
+A CLI report that needs no client-plugin system is also included:
+
+```bash
+node bin/usage-report.mjs --port 3080
+```
+
+> The client-plugin route is registered by `@deepseek-ai/dsh-client-modules`, which the
+> Web profile mounts. If a reduced assembly omits that row, **every** client bundle
+> (including DSH's own) 404s and this UI cannot appear; the host half and the CLI report
+> above keep working.
+
 ---
 
 ## Configuration
