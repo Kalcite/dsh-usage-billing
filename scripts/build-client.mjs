@@ -73,13 +73,18 @@ const TARGETS = [
     file: 'index.cjs.js',
     require: {
       'styles-inject.cjs.js': ['injectStyles'],
-      'panel.cjs.js': ['UsagePanel'],
+      'panel.cjs.js': ['UsagePanel', 'panelInternals'],
     },
   },
 ]
 
-/** 拼接后的 factory 里，入口模块导出的名字。官方约定是 `inject` + `apply`。 */
-const ENTRY_EXPORTS = ['inject', 'apply']
+/**
+ * 拼接后的 factory 里，入口模块导出的名字。
+ *
+ * 官方只要求 `inject` + `apply`；`UsagePanel` / `PANEL_ID` 是为了让渲染测试
+ * 能直接拿到组件（模块私有作用域外部拿不到），运行时多挂两个键无副作用。
+ */
+const ENTRY_EXPORTS = ['inject', 'apply', 'PANEL_ID', 'PANEL_LABEL', 'UsageBillingIcon', 'UsagePanel', 'panelInternals']
 
 /** 把 `./x` 与 `x` 归一成同一个模块键。 */
 function normalizeSpec(spec) {

@@ -26,7 +26,7 @@
 
 const React = require('react')
 const { injectStyles } = require('./styles-inject.cjs.js')
-const { UsagePanel } = require('./panel.cjs.js')
+const { UsagePanel, panelInternals } = require('./panel.cjs.js')
 
 /** 主导航 id，同时是 `main` 槽的 key。 */
 const PANEL_ID = 'usage-billing'
@@ -104,4 +104,4 @@ function apply(ctx) {
   )
 }
 
-return { inject, apply, PANEL_ID, PANEL_LABEL, UsageBillingIcon }
+return { inject, apply, PANEL_ID, PANEL_LABEL, UsageBillingIcon, UsagePanel, panelInternals }

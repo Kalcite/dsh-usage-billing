@@ -19,11 +19,15 @@ A new **用量计费** row in the left sidebar navigation (beside Plugins / Sche
 - **Peak / off-peak bill** — peak cost, off-peak cost, savings versus an all-peak baseline, peak token share.
 - **Per-model breakdown** — tokens and cost per model, priced separately.
 - **Last 30 days** — daily bar chart plus a detail table.
-- **24-hour distribution** — hour histogram with peak windows highlighted.
-- **Date × hour heatmap** — last 30 active dates × 24 hours; peak hours outlined, weekend-flat days green-framed.
-- **Year heatmap** — GitHub-style, last 365 days.
+- **24-hour distribution** — hour histogram with peak windows highlighted; labels sit on their own baseline row (`00/06/12/18/24`) so bar heights never shift.
+- **Date × hour heatmap** — 24 hours per date; peak hours outlined, weekend-flat days green-framed, with a **window slider to resize and pan into earlier periods**.
+- **Year heatmap** — GitHub-style, sharing that **same time window** (tier thresholds recompute inside the window, so zooming in doesn't flatten every cell to one shade).
 - **Session analysis** — sessions sorted by cost, expandable into a per-session donut, peak/off-peak bill, duration, and 24-hour distribution.
 - **Scan info** — data directory, logs read, generation distribution (gen 0 / gen 4), compressed bytes, elapsed time.
+
+The window control offers presets (last 30 / 90 / 180 days, all) plus two sliders:
+**window** (how many days) and **right edge** (which day to end on), so any historical
+range is reachable. Until you move it, the right edge tracks the newest day.
 
 Every pricing rule (rates, peak windows, weekend rule, timezone) is editable live at **Settings → Plugins → dsh-usage-billing**. Those fields are schemastery `.volatile()` fields, so the Loader persists them into the profile patch and the bill recomputes immediately — no restart.
 
@@ -256,6 +260,45 @@ pnpm run verify         # tests + client-artifact contract + real session-store 
 - `tests/pricing.test.mjs` — rate fallback/merge, peak boundaries (inclusive start, exclusive end), weekend effective date, cross-timezone date/hour resolution, cost formulas.
 - `tests/parse.test.mjs` — log filename selection (incl. v4 and unbounded generations), multi-frame zstd scanning and corrupt-frame tolerance, `(turn, step)` dedupe, model-attribution priority, corrupt-line tolerance, CRLF.
 - `tests/host-route.test.mjs` — mounts the plugin into a real cordis app with the real `dsh-host-webserver` and a synthetic compressed session store, verifying the route, the billed numbers, live config changes, the trust fence, and route release on unload.
+
+---
+
+## Desktop and Web
+
+**Both surfaces run the same code, but each must be installed and restarted separately.**
+
+| | Host half (data / billing) | UI half (sidebar row + page) |
+| --- | --- | --- |
+| Web profile (`dsh web`) | ✅ verified on 3080 | ✅ verified rendering |
+| Desktop (Electron) | ✅ verified on 19387 (`/usage-billing/health` → 200) | ⚠️ structurally supported, not yet exercised |
+
+Why desktop is expected to work: the desktop app is **the complete DSH Web application
+wrapped in Electron**. It forwards application HTTP requests — including the plugin
+artifact route `/plugins/*` — to the authenticated Host (`forwardWebRequest` in
+`apps/desktop/src/web-document.ts`, whose `PLUGIN_BUNDLE_PATH = /^\/plugins\//` handles
+artifact response headers), and the packaged artifact **does contain** the client-plugin
+system and the slots this plugin uses (verified: `dsh-client-modules`,
+`dsh-client-ui-layout`, `dsh-client-ui-sidebar`, `dsh-client-ui-slots` all present inside
+`resources/app.asar`).
+
+**Desktop needs its own install**, followed by a full quit-and-reopen (a profile's bundle
+list is only composed at startup):
+
+```bash
+dsh plugin --profile desktop add dsh-usage-billing
+```
+
+The desktop profile is owned exclusively by Electron, so the plain CLI refuses to boot or
+dump it (`profile "desktop" is managed exclusively by the Electron application`). The
+command above is Desktop's own bundled command runtime
+(`resources/runtime/cli/bin/dsh.cmd`) and can manage plugins while the app is closed.
+
+> ⚠️ **The easiest development trap**: `dsh plugin add` installs a pnpm **content-addressed
+> snapshot** (hard links), not a link to your working tree. Rebuilding in your checkout
+> therefore does **not** change what the profile serves — the host keeps reading the old
+> artifact, so it looks like "the fix verified but the UI never changed". While developing,
+> replace the profile's `node_modules/<pkg>` with a junction to your working tree, or re-run
+> `add` after each build.
 
 ---
 

@@ -69,7 +69,20 @@ const PANEL_CSS = `
 .ub-bar-c{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;min-width:0}
 .ub-bar{width:100%;border-radius:2px 2px 0 0;background:var(--dsw-alias-brand-primary,#7c9cff);min-height:1px}
 .ub-bar.peak{background:var(--dsw-alias-state-warning-primary,#e0a33e)}
-.ub-bar-x{font-size:9px;opacity:.55;white-space:nowrap}
+.ub-bar-x{font-size:9px;opacity:.55;white-space:nowrap;line-height:1}
+/* 24 小时的刻度是独立一行：柱子只占满自己的列，刻度用百分比对齐到整点边界，
+   这样高峰/空闲柱高不会因为刻度文字的有无而错位。 */
+.ub-axis{position:relative;height:14px;margin-top:2px}
+.ub-axis-l{position:absolute;top:0;transform:translateX(-50%);font-size:9px;opacity:.55;white-space:nowrap}
+.ub-axis-l-end{transform:translateX(-100%)}
+/* 热力图时间窗控件 */
+.ub-win{display:flex;flex-direction:column;gap:6px;padding:8px 10px;margin-bottom:8px;border-radius:8px;
+  background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.07));border:1px solid var(--dsw-alias-border-secondary,rgba(127,127,127,.14))}
+.ub-win-row{display:flex;align-items:center;gap:8px;font-size:11.5px;flex-wrap:wrap}
+.ub-win-lbl{opacity:.7;min-width:32px}
+.ub-win-val{opacity:.7;margin-left:auto;font-variant-numeric:tabular-nums}
+.ub-win-num{opacity:.8;min-width:62px;text-align:right;font-variant-numeric:tabular-nums}
+.ub-range{flex:1;min-width:120px;height:16px;accent-color:var(--dsw-alias-brand-primary,#7c9cff);cursor:pointer}
 .ub-table{display:flex;flex-direction:column;border-radius:8px;overflow:hidden;
   border:1px solid var(--dsw-alias-border-secondary,rgba(127,127,127,.18))}
 .ub-tr{display:grid;gap:8px;padding:6px 10px;font-size:12px;align-items:center;font-variant-numeric:tabular-nums}

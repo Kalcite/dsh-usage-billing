@@ -19,11 +19,15 @@ DeepSeek Harness 的**用量与计费**插件。扫描会话日志统计 Token �
 | 峰谷账单 | 高峰费用、空闲费用、相对全高峰节省、高峰 token 占比 |
 | 模型构成 | 每个模型的 token 与费用（多模型分别计价） |
 | 最近 30 天消耗 | 按日柱状图 + 明细表 |
-| 24 小时分布 | 跨全部日期的按时段柱状图，高峰时段高亮 |
-| 日期 × 小时热力 | 近 30 个日期 × 24 小时，描边标出高峰、绿框标出周末全天空闲 |
-| 年度热力图 | GitHub 风格的近 365 天热力 |
+| 24 小时分布 | 跨全部日期的按时段柱状图，高峰时段高亮；刻度单独一行对齐（`00/06/12/18/24`） |
+| 日期 × 小时热力 | 日期 × 24 小时，描边标出高峰、绿框标出周末全天空闲；**可用滑块改窗口大小并平移查看更早时段** |
+| 年度热力图 | GitHub 风格热力，与上面的热力图**共用同一个时间窗**（分档按窗口内数据重算，放大后不会整片同色） |
 | 会话分析 | 按费用排序的会话表，可展开看单会话的饼图、峰谷账单、时长与 24 小时分布 |
 | 扫描信息 | 数据目录、读取日志数、格式分布（gen 0 / gen 4）、压缩体积与耗时 |
+
+计时窗口控件提供三个预设（最近 30 / 90 / 180 天）与「全部」，外加两个滑块：
+**窗口**（看多少天）与**右端**（看到哪一天），因此可以回看任意历史时段。
+右端在未手动调整时始终跟随最新一天。
 
 计费规则（单价、峰谷时段、周末规则、时区）全部可在 **设置 → 插件 → dsh-usage-billing** 里实时修改——那些字段都是 schemastery 的 `.volatile()` 字段，由 Loader 写回 profile patch，改完立刻重算，不需要重启。
 
@@ -93,7 +97,41 @@ node bin/usage-report.mjs --port 3080
 
 ---
 
-## 配置
+## 桌面端与网页端
+
+**两端的代码是同一套，但需要分别装、分别重启。**
+
+| | 宿主半边（取数 / 计费） | 界面半边（导航栏 + 看板） |
+| --- | --- | --- |
+| Web profile（`dsh web`） | ✅ 已在 3080 实测 | ✅ 已实测渲染 |
+| 桌面端（Electron） | ✅ 已在 19387 实测（`/usage-billing/health` 返回 200） | ⚠️ 结构上可用，未实测 |
+
+为什么说桌面端结构上可用：桌面端就是**把完整的 DSH Web 应用包在 Electron 里**——
+
+- 它把应用 HTTP 请求（含插件产物路由 `/plugins/*`）转发给受认证的 Host
+  （`apps/desktop/src/web-document.ts` 的 `forwardWebRequest`，其中
+  `PLUGIN_BUNDLE_PATH = /^\/plugins\//` 专门处理产物响应头）；
+- 打包产物里**确实包含**客户端插件系统与我要用的那几个槽位——实测
+  `resources/app.asar` 内有 `dsh-client-modules`、`dsh-client-ui-layout`、
+  `dsh-client-ui-sidebar`、`dsh-client-ui-slots`。
+
+**但桌面端要单独装一次**，而且装完要**完全退出并重开**桌面应用（profile 的 bundle
+列表只在启动时组装）：
+
+```bash
+dsh plugin --profile desktop add dsh-usage-billing
+```
+
+桌面 profile 由 Electron 独占，CLI 会拒绝直接启动/导出它（`profile "desktop" is
+managed exclusively by the Electron application`）——上面这条是 Desktop 自带的命令运行时
+（`resources/runtime/cli/bin/dsh.cmd`），可以在桌面应用关闭时管理插件。
+
+> ⚠️ **开发时最容易踩的坑**：`dsh plugin add` 装进来的是 pnpm 的**内容寻址快照**
+> （硬链接），不是指向你工作目录的链接。所以你在工作区重新 `build` 之后，profile 里
+> 那一份**不会跟着变**，宿主仍读旧产物——症状是「明明改好了、验证也过了，界面却没变化」。
+> 开发时请把 profile 的 `node_modules/<包名>` 换成指向工作区的目录联接（junction），
+> 或者改完后重跑一次 `add`。
+
 
 所有字段都有默认值，**不配置即可用**（默认即 DeepSeek 官方定价）。要自定义，写进 profile 的 `cordis.patch.yml`：
 

@@ -3,7 +3,7 @@
 //
 // 这是最接近 DSH 自身加载方式的验证：同样的 schemastery Config 校验、
 // 同样的 ctx.effect 生命周期、同样的 ctx.webServer.register 路由载体。
-import { test, after } from 'node:test'
+import { test, after, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -15,6 +15,25 @@ import WebServer from '@deepseek-ai/dsh-host-webserver'
 
 import * as plugin from '../lib/index.js'
 import { Config, ROUTE_PREFIX, isTrustedRequest } from '../lib/index.js'
+
+/**
+ * 原生 fetch 的引用。
+ *
+ * 测试入口让所有文件共享同一进程，因此**别的测试文件可能替换 `globalThis.fetch`**
+ * （jsdom 渲染测试就会）。这里在模块加载时抓住原生实现，之后的回环 HTTP 全用它，
+ * 免得被同进程的桩接管——症状是这些用例单独跑全绿、进套件后集体失败。
+ */
+const realFetch = globalThis.fetch
+void realFetch
+
+/**
+ * 每个用例前把 `fetch` 复位为原生实现。
+ *
+ * 同进程里别的测试文件（jsdom 渲染测试）会用 before 钩子替换 `globalThis.fetch`，
+ * 而钩子的执行时机不受本文件的用例边界约束。这里逐用例复位，保证本文件的回环
+ * HTTP 永远打到真实实现，而不是别人留下的桩。
+ */
+beforeEach(() => { globalThis.fetch = realFetch })
 
 /* ------------------------------------------------------------ 合成会话库 */
 
