@@ -1,6 +1,6 @@
 # dsh-usage-billing
 
-DeepSeek Harness 的**用量与计费**插件。扫描会话日志统计 Token 消耗，按多模型单价与峰谷时段实时算钱，并把账单做成一个看板挂进 DSH 设置页。
+DeepSeek Harness 的**用量与计费**插件。扫描会话日志统计 Token 消耗，按多模型单价与峰谷时段实时算钱，并把账单做成一个看板挂进 DSH **左侧主导航栏**。
 
 移植自 `dsh-launcher-webui` 启动器的内嵌用量插件（`server/usage.mjs` + `src/components/UsageCard.tsx`），并修正了其中两个真实存在的缺陷（见[与原实现的差异](#与原实现的差异)）。
 
@@ -10,7 +10,7 @@ DeepSeek Harness 的**用量与计费**插件。扫描会话日志统计 Token �
 
 ## 它做什么
 
-在 **设置 → 用量计费** 里新增一个分区，包含：
+在左侧主导航栏新增一个 **「用量计费」** 条目（与「插件」「定时任务」同级），点开即占据中间主列，包含：
 
 | 模块 | 内容 |
 | --- | --- |
@@ -43,7 +43,7 @@ dsh plugin --profile web add dsh-usage-billing
 2. 把它写进 profile `package.json` 的 `dependencies`；
 3. 因为包声明了 `dsh.bundle.patch`，把它追加进 `dsh.profile.bundles`，于是它的 `cordis.patch.yml` 会在下次启动时被合并——**不需要手改任何 profile 文件**。
 
-装完重启 DSH，打开 **设置 → 用量计费**。
+装完重启 DSH，左栏导航里点 **「用量计费」**。
 
 ### 从源码 / 本地目录
 
@@ -253,7 +253,10 @@ window.__ModuleLoader__.load({
 
 构建脚本会静态校验：任何 `require()` 都必须能由模块表回答（基线外部依赖或 `dsh.client.external`），并且不出现跨插件的 `@deepseek-ai/*` **值**引用。
 
-浏览器半边通过 `ctx.slots.inject('settings.section', …)` 贡献设置页分区，只注入 `slots`，数据全部走自己的 HTTP 路由。
+浏览器半边通过 `ctx.slots.inject('main', …)`（主列面板）与
+`ctx.slots.inject('sidebar.panellist', …)`（左栏导航行）贡献界面，两者的 id 相同
+（`usage-billing`），点击导航行即 `layout.selectPanel('usage-billing')`。
+只注入 `slots`，数据全部走自己的 HTTP 路由。
 
 ---
 

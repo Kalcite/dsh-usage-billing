@@ -45,12 +45,17 @@ assert.equal(typeof exportsObj.apply, 'function')
 // and instead re-evaluate the bundle with panelInternals wired through.
 // Simpler: the entry exports only the plugin face, so evaluate the panel module
 // directly from source for logic checks.
+// 面板模块现在是一个 IIFE 函数体、以 `return { … }` 交出自己的导出面
+// （见 scripts/build-client.mjs），因此这里把它包成一个函数来求值。
 const panelSource = readFileSync(new URL('../src/client/panel.cjs.js', import.meta.url), 'utf8')
-const panelSandbox = { require: (spec) => { if (spec === 'react') return reactStub; throw new Error(spec) }, exports: {}, console }
-panelSandbox.globalThis = panelSandbox
-vm.createContext(panelSandbox)
-vm.runInContext(panelSource.replace(/^'use strict'$/m, ''), panelSandbox, { filename: 'panel.cjs.js' })
-const panel = panelSandbox.exports.panelInternals
+const registry = { react: reactStub }
+const wrapped = `(function (require) {\n${panelSource.replace(/^'use strict'\s*$/m, '')}\n})`
+const panelFactory = vm.runInNewContext(wrapped, { console }, { filename: 'panel.cjs.js' })
+const panelModule = panelFactory((spec) => {
+  if (Object.prototype.hasOwnProperty.call(registry, spec)) return registry[spec]
+  throw new Error(`panel requires ${spec}`)
+})
+const panel = panelModule.panelInternals
 assert.ok(panel, 'panelInternals must be exported for self-test')
 
 console.log('=== client recompute vs host totals ===')

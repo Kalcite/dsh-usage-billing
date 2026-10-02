@@ -17,6 +17,11 @@ const STYLE_TAG_ID = 'dsh-usage-billing/panel.css'
 
 /** 面板样式文本。 */
 const PANEL_CSS = `
+/* 整页容器：作为 main 槽里的一个面板挂载，自己滚动。 */
+.ub-page{display:flex;flex-direction:column;gap:18px;font-size:13px;
+  padding:18px 22px 36px;overflow-y:auto;height:100%;box-sizing:border-box;
+  color:var(--dsw-alias-text-primary,inherit)}
+.ub-page-title{margin:0 0 2px;font-size:17px;font-weight:600;letter-spacing:.2px}
 .ub-root{display:flex;flex-direction:column;gap:18px;font-size:13px;color:var(--dsw-alias-text-primary,inherit)}
 .ub-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .ub-title{display:flex;flex-direction:column;gap:2px}
@@ -100,5 +105,4 @@ const PANEL_CSS = `
   background:var(--dsw-alias-bg-layer-3,rgba(127,127,127,.2))}
 `
 
-exports.STYLE_TAG_ID = STYLE_TAG_ID
-exports.PANEL_CSS = PANEL_CSS
+return { STYLE_TAG_ID, PANEL_CSS }

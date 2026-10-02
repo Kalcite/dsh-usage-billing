@@ -395,11 +395,14 @@ function YearHeatmap(props) {
 /* ------------------------------------------------------------------ 面板 */
 
 /**
- * 主面板组件。
+ * 主面板组件 —— 作为 `main` 槽里由侧栏导航选中的整页，不是设置小节。
  *
- * @param props.ctx - 客户端 cordis 上下文（用于读活动会话的实时投影，可选）。
+ * `main` 槽的 owner 调用是 `renderSlot('main', {}, { entryKey })`，**不传任何
+ * owner props**；业务数据全部由注册方自己的 `inject` face 送进来。本页不需要
+ * 任何来自 ctx 的东西（数据走自己的 HTTP 路由），因此 inject 返回空对象即可，
+ * 组件也不再接收 `ctx`。
  */
-function UsagePanel(props) {
+function UsagePanel() {
   const [state, setState] = React.useState({ status: 'loading', overview: null, error: null, fetchedAt: 0 })
   const [expanded, setExpanded] = React.useState(null)
   const [refreshing, setRefreshing] = React.useState(false)
@@ -437,7 +440,12 @@ function UsagePanel(props) {
   )
 
   if (state.status === 'loading' && !overview) {
-    return h('div', { className: 'ub-root' }, h('div', { className: 'ub-loading' }, '正在扫描会话日志…'))
+    return h('div', { className: 'ub-page' },
+      h('div', { className: 'ub-page-head' },
+        h('h1', { className: 'ub-page-title' }, '用量计费'),
+      ),
+      h('div', { className: 'ub-loading' }, '正在扫描会话日志…（首次约 4–5 秒）'),
+    )
   }
 
   const head = h('div', { className: 'ub-head' },
@@ -459,7 +467,7 @@ function UsagePanel(props) {
   )
 
   if (state.status === 'error' && !overview) {
-    return h('div', { className: 'ub-root' }, head,
+    return h('div', { className: 'ub-page' }, head,
       h('div', { className: 'ub-err' }, '读取用量失败：' + state.error),
       h('p', { className: 'ub-hint' },
         '请确认插件主机半边已加载（设置 → 插件），以及当前 profile 能读到会话目录。'),
@@ -472,7 +480,7 @@ function UsagePanel(props) {
   const maxSessionCost = Math.max(0.01, ...overview.bySession.map((s) => sessionCost(s, pricing)))
   const last30 = (overview.byDay || []).slice(-30).reverse()
 
-  return h('div', { className: 'ub-root' },
+  return h('div', { className: 'ub-page' },
     head,
 
     state.error ? h('div', { className: 'ub-err' }, '刷新失败（显示上次结果）：' + state.error) : null,
@@ -522,8 +530,7 @@ function UsagePanel(props) {
               : '周末全天空闲（始终生效）')
             : '周末区分峰谷',
           h('br'),
-          '改单价 / 峰谷规则：设置 → 插件 → dsh-usage-billing。',
-        ),
+          '改单价 / 峰谷规则：设置 → 插件 → dsh-usage-billing。',        ),
       ),
     ),
 
@@ -731,13 +738,15 @@ function SessionDetail(props) {
 /**
  * 模块导出面。
  *
- * 本文件会作为 IIFE 片段拼进 `lib/client.js`，因此导出必须写成对**本作用域内**
- * `exports` 的赋值（`exports.X = X`），不能用简写——简写会读成同名局部变量。
- * `panelInternals` 只用于自测，不参与界面。
+ * 本文件会作为 IIFE 片段拼进 `lib/client.js`，导出通过**函数返回值**交出去
+ * （而不是 `exports.X = …` 赋值），这样拼装脚本无需解析赋值语句，也躲开了
+ * 模板字符串里换行 / 分号的歧义。`panelInternals` 只用于自测，不参与界面。
  */
-exports.UsagePanel = UsagePanel
-exports.panelInternals = {
-  fmtTokens, fmtExact, fmtCost, fmtPct, fmtBytes, fmtTime, fmtDuration,
-  priceOfModel, inPeakSlot, weekendRelaxActive, isPeakAt,
-  baselineCostOfBucket, costOfBucket, bucketTokens, recompute, sessionCost,
+return {
+  UsagePanel,
+  panelInternals: {
+    fmtTokens, fmtExact, fmtCost, fmtPct, fmtBytes, fmtTime, fmtDuration,
+    priceOfModel, inPeakSlot, weekendRelaxActive, isPeakAt,
+    baselineCostOfBucket, costOfBucket, bucketTokens, recompute, sessionCost,
+  },
 }

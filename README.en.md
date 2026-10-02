@@ -1,6 +1,6 @@
 # dsh-usage-billing
 
-Token usage and billing for **DeepSeek Harness**. It scans DSH session logs, computes token consumption, prices it against a multi-model rate table with peak / off-peak windows, and renders the bill as a dashboard page inside the DSH settings panel.
+Token usage and billing for **DeepSeek Harness**. It scans DSH session logs, computes token consumption, prices it against a multi-model rate table with peak / off-peak windows, and renders the bill as a page in the DSH **left sidebar navigation**.
 
 Ported from the `dsh-launcher-webui` launcher's embedded usage plugin (`server/usage.mjs` + `src/components/UsageCard.tsx`), with two real defects fixed (see [Differences from the original](#differences-from-the-original)).
 
@@ -12,7 +12,7 @@ Zero runtime dependencies: `dependencies` is empty; everything comes from `peerD
 
 ## What it gives you
 
-A new section at **Settings → 用量计费** (Usage & Billing):
+A new **用量计费** row in the left sidebar navigation (beside Plugins / Schedules). Selecting it occupies the center column:
 
 - **Overview cards** — total cost (peak/off-peak, recomputed live), input / output / cache-read tokens, session count, active days.
 - **Token composition** — donut of cache-hit input, uncached input, output, and cache writes, with each bucket's unit price.
@@ -37,7 +37,7 @@ dsh plugin --profile web add dsh-usage-billing
 
 Substitute the profile you actually run (`dsh plugin --profile desktop add dsh-usage-billing` for the desktop profile). The command installs the package into that profile's `node_modules`, adds it to the profile `package.json` `dependencies`, and — because the package declares `dsh.bundle.patch` — appends it to `dsh.profile.bundles` so its `cordis.patch.yml` is merged at next boot. **No profile file needs manual editing.**
 
-Restart DSH, then open **Settings → 用量计费**.
+Restart DSH, then click **用量计费** in the left sidebar.
 
 ### From source
 
@@ -230,7 +230,11 @@ window.__ModuleLoader__.load({
 
 The build script statically asserts that every `require()` is answerable by the module table (baseline externals or `dsh.client.external`) and that no cross-plugin `@deepseek-ai/*` **value** import appears.
 
-The browser half contributes its settings section via `ctx.slots.inject('settings.section', …)`, injects only `slots`, and takes all data from its own HTTP route.
+The browser half contributes its UI through `ctx.slots.inject('main', …)` (the center
+panel) and `ctx.slots.inject('sidebar.panellist', …)` (the navigation row), both under
+the same id (`usage-billing`); selecting the row calls
+`layout.selectPanel('usage-billing')`. It injects only `slots`, and takes all data from
+its own HTTP route.
 
 ---
 

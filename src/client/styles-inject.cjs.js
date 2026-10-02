@@ -28,4 +28,4 @@ function injectStyles() {
   document.head.appendChild(tag)
 }
 
-exports.injectStyles = injectStyles
+return { injectStyles }

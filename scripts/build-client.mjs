@@ -6,24 +6,23 @@
  *
  * DSH 的官方客户端预设（`packages/client/tsdown.client.ts`）**不在任何已发布的
  * npm 包里**，官方文档（`docs/cookbook/adding-a-settings-card.md`）明确说仓库外
- * 的包要自己复现这个构建。而本插件在浏览器侧只有三个模块、唯一的外部依赖是
+ * 的包要自己复现这个构建。而本插件在浏览器侧只有几个模块、唯一的外部依赖是
  * shell 已经共享进模块表的 `react`，引入 rolldown/tsdown 只会多几百个依赖。
  *
- * 因此这里直接拼接源码并套上官方预设那段 banner / footer：
+ * ## 拼装方式
  *
- * ```js
- * window.__ModuleLoader__.load({
- *   id: "<包名>",
- *   factory: (require) => {
- *     var module = { exports: {} }; var exports = module.exports;
- *     …源码…
- *     return module.exports; } });
- * ```
+ * 每个 `src/client/*.cjs.js` 就是一个 **IIFE 的函数体**：它内部 `require()` 本包
+ * 其它模块、并以 `return { … }` 交出自己的导出面。构建脚本只做三件事：
  *
- * 拼接顺序由源码里的显式标记决定（见 TARGETS），并做两项静态校验：
- *   1. 只允许 require 模块表提供的基线说明符（默认只有 `react`）；
- *   2. 不允许出现任何 `@deepseek-ai/*` 的**值**引用（跨插件值引用被官方纯洁性
- *      门禁禁止）。
+ *   1. 把 `require('./x.cjs.js')` 重写成对已定义模块的属性读取（`TARGETS.require`）；
+ *   2. 把 `require('react')` 这类基线说明符重写成向 shell 模块表取；
+ *   3. 用官方预设的 banner / footer 包起来。
+ *
+ * 导出走**返回值**而不是 `exports.X = …` 赋值是刻意的：这样脚本完全不必解析
+ * 赋值语句，也就不会在模板字符串里的换行 / 分号上踩坑。
+ *
+ * 静态校验：任何 `require` 都必须能由模块表回答（基线外部依赖或
+ * `dsh.client.external`），从而保证不出现跨插件的值引用。
  *
  * @module dsh-usage-billing/scripts/build-client
  */
@@ -63,47 +62,28 @@ const EXTRA_EXTERNALS = new Set(pkg.dsh?.client?.external ?? [])
 /**
  * 参与拼接的源文件，**按依赖顺序**（被依赖者在前）。
  *
- * - `defines`：该模块对外提供的名字，拼接时作为 IIFE 的返回值。
- * - `require`：本模块 `require('./x')` 到「要取的名字」的映射；`./` 前缀可写可不写。
+ * `require` 是本模块 `require('./x')` 到「要取的名字」的映射；`./` 前缀可写可不写。
+ * 每个模块的导出面由它自己的 `return { … }` 给出，脚本不解析。
  */
 const TARGETS = [
-  { file: 'styles.cjs.js', defines: ['STYLE_TAG_ID', 'PANEL_CSS'], require: {} },
-  {
-    file: 'styles-inject.cjs.js',
-    defines: ['injectStyles'],
-    require: { 'styles.cjs.js': ['PANEL_CSS', 'STYLE_TAG_ID'] },
-  },
-  { file: 'panel.cjs.js', defines: ['UsagePanel', 'panelInternals'], require: {} },
+  { file: 'styles.cjs.js', require: {} },
+  { file: 'styles-inject.cjs.js', require: { 'styles.cjs.js': ['PANEL_CSS', 'STYLE_TAG_ID'] } },
+  { file: 'panel.cjs.js', require: {} },
   {
     file: 'index.cjs.js',
-    defines: ['inject', 'apply', 'SECTION_ID'],
-    require: { 'styles-inject.cjs.js': ['injectStyles'], 'panel.cjs.js': ['UsagePanel'] },
+    require: {
+      'styles-inject.cjs.js': ['injectStyles'],
+      'panel.cjs.js': ['UsagePanel'],
+    },
   },
 ]
+
+/** 拼接后的 factory 里，入口模块导出的名字。官方约定是 `inject` + `apply`。 */
+const ENTRY_EXPORTS = ['inject', 'apply']
 
 /** 把 `./x` 与 `x` 归一成同一个模块键。 */
 function normalizeSpec(spec) {
   return spec.startsWith('./') ? spec.slice(2) : spec
-}
-
-/**
- * 去掉模块源码里「返回值式」的导出行。
- *
- * 每个模块源文件末尾可能有裸的 `Foo,\n  Bar,` 这类仅用于返回的标识符列表，
- * 它们在被包进 IIFE 后没有任何语句上下文，会直接变成语法错误。这里按行剔除
- * 那些「只有标识符 + 逗号」的行（多行对象字面量/数组内部的元素行不受影响，
- * 因为它们不满足整行仅标识符的形态）。
- *
- * 真正的导出由各模块自己对作用域内 `exports` 赋值完成，见各 `src/client/*.cjs.js`。
- */
-function stripTrailingExportLines(source) {
-  const out = []
-  for (const line of source.split('\n')) {
-    if (/^\s*[A-Za-z_$][A-Za-z0-9_$]*\s*,\s*$/.test(line)) continue
-    if (/^\s*[A-Za-z_$][A-Za-z0-9_$]*\s*,\s*\/\//.test(line)) continue
-    out.push(line)
-  }
-  return out.join('\n').replace(/\n{3,}/g, '\n\n')
 }
 
 /** 校验并重写 `require()`。 */
@@ -111,8 +91,7 @@ function rewriteRequires(source, file, mapping) {
   return source.replace(/require\(\s*['"]([^'"]+)['"]\s*\)/g, (match, spec) => {
     const key = normalizeSpec(spec)
     if (Object.prototype.hasOwnProperty.call(mapping, key)) {
-      // 展开成显式的属性读取：不能用 `{ a, b }` 解构简写，那会读成同名局部变量
-      // （正是被替换掉的那一行），在初始化前就抛 ReferenceError。
+      // 展开成显式属性读取：不能用 `{ a, b }` 解构简写，那会读成同名局部变量。
       const defs = JSON.stringify(key)
       return '{ ' + mapping[key].map((name) => `${name}: __ub_internal_defs[${defs}].${name}`).join(', ') + ' }'
     }
@@ -133,38 +112,27 @@ function buildFactoryBody() {
 
   // 模块表（`react` 等）的取用口：每个说明符只向 shell 取一次。
   chunks.push('var __ub_modules = {};')
-  chunks.push("function __ub_external(spec) { if (!(spec in __ub_modules)) __ub_modules[spec] = require(spec); return __ub_modules[spec]; }")
+  chunks.push('function __ub_external(spec) { if (!(spec in __ub_modules)) __ub_modules[spec] = require(spec); return __ub_modules[spec]; }')
   chunks.push('var __ub_internal_defs = {};')
 
   for (const target of TARGETS) {
     const source = readFileSync(join(CLIENT_DIR, target.file), 'utf8')
-    const body = rewriteRequires(stripTrailingExportLines(source), target.file, target.require ?? {})
-
+    const body = rewriteRequires(source, target.file, target.require ?? {})
     chunks.push(`\n/* ---- ${target.file} ---- */`)
-    // 每个模块包一层 IIFE，避免同名局部变量互相踩；模块自己对 `exports`
-    // 赋值来暴露导出面。
     chunks.push(`__ub_internal_defs[${JSON.stringify(target.file)}] = (function () {`)
-    chunks.push('var exports = {};')
     chunks.push(body)
-    chunks.push('return exports;')
     chunks.push('})();')
   }
 
-  // 入口模块（最后一个 target）的导出面直接成为整个包的导出。
-  const entry = TARGETS[TARGETS.length - 1]
+  const entryFile = TARGETS[TARGETS.length - 1].file
   chunks.push('\n/* ---- exports ---- */')
-  chunks.push(`var __ub_entry = __ub_internal_defs[${JSON.stringify(entry.file)}];`)
-  for (const name of entry.defines) {
-    chunks.push(`exports.${name} = __ub_entry.${name};`)
-  }
+  chunks.push(`var __ub_entry = __ub_internal_defs[${JSON.stringify(entryFile)}];`)
+  for (const name of ENTRY_EXPORTS) chunks.push(`exports.${name} = __ub_entry.${name};`)
 
   return chunks.join('\n')
 }
 
-/**
- * 纯净化检查：浏览器半边不得对其它 `@deepseek-ai/*` 做值引用
- * （跨插件值引用被官方的客户端纯洁性门禁禁止，只能用 `import type`）。
- */
+/** 纯净化检查：任何未被重写的 `require(<bare>)` 都必须能由模块表回答。 */
 function assertOnlyBaselineExternals(body) {
   const offenders = []
   const pattern = /require\(\s*['"]([^'"]+)['"]\s*\)/g
