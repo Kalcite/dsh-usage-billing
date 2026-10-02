@@ -182,9 +182,13 @@ async function main() {
   }
 
   console.log(`\n${line}`)
-  console.log('提示：改单价 / 峰谷规则 → 设置 → 插件 → dsh-usage-billing，')
+  console.log('提示：入口在左侧导航栏「用量计费」；改单价 / 峰谷规则 → 设置 → 插件 → dsh-usage-billing，')
   console.log('      或直接改 profile 的 cordis.patch.yml 里 id: usage-billing 那一行。')
   console.log(line)
 }
 
 await main()
+
+// Node 的 fetch 会保留 keep-alive 连接，事件循环因此不会自己结束，
+// 进程会以「仍有活跃句柄」的非零码退出。这里显式收尾，让退出码只反映成败。
+process.exit(process.exitCode ?? 0)
